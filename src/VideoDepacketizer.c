@@ -60,7 +60,7 @@ typedef struct _LENTRY_INTERNAL {
 
 // Init
 void initializeVideoDepacketizer(int pktSize) {
-    LbqInitializeLinkedBlockingQueue(&decodeUnitQueue, 15);
+    LbqInitializeLinkedBlockingQueue(&decodeUnitQueue, 8);
 
     nextFrameNumber = 1;
     startFrameNumber = 0;
@@ -142,6 +142,25 @@ static void freeDecodeUnitList(PLINKED_BLOCKING_QUEUE_ENTRY entry) {
 
         entry = nextEntry;
     }
+}
+// Drop up to maxDrops oldest queued decode units (low-latency overflow recovery).
+// Returns number of dropped frames.
+static int dropOldestQueuedDecodeUnits(int maxDrops) {
+    int dropped = 0;
+    void* oldDu = NULL;
+
+    while (dropped < maxDrops) {
+        int err = LbqPollQueueElement(&decodeUnitQueue, &oldDu);
+        if (err != LBQ_SUCCESS || oldDu == NULL) {
+            break;
+        }
+
+        // Free buffers + DU
+        LiCompleteVideoFrame(oldDu, DR_CLEANUP);
+        dropped++;
+    }
+
+    return dropped;
 }
 
 void stopVideoDepacketizer(void) {
@@ -510,28 +529,49 @@ static void reassembleFrame(int frameNumber, bool frameIsLTR) {
             nalChainDataLength = 0;
 
             if ((VideoCallbacks.capabilities & CAPABILITY_DIRECT_SUBMIT) == 0) {
-                if (LbqOfferQueueItem(&decodeUnitQueue, qdu, &qdu->entry) == LBQ_BOUND_EXCEEDED) {
-                    Limelog("Video decode unit queue overflow\n");
+                int offerErr = LbqOfferQueueItem(&decodeUnitQueue, qdu, &qdu->entry);
+                if (offerErr == LBQ_BOUND_EXCEEDED) {
 
-                    // RFI recovery is not supported here
-                    waitingForIdrFrame = true;
+                    // --- Low-latency overflow handling ---
+                    //
+                    // SAFE default: flush queued frames + force IDR to avoid reference corruption.
+                    // EXPERIMENTAL (compile-time): drop-oldest to make room for the latest frame.
 
-                    // Clear NAL state for the frame that we failed to enqueue
-                    nalChainHead = qdu->decodeUnit.bufferList;
-                    nalChainDataLength = qdu->decodeUnit.fullLength;
-                    dropFrameState();
+#ifdef LC_EXPERIMENTAL_DECODEQ_DROP_OLDEST
+                    int dropped = dropOldestQueuedDecodeUnits(1);
+    offerErr = LbqOfferQueueItem(&decodeUnitQueue, qdu, &qdu->entry);
+    if (offerErr == LBQ_SUCCESS) {
+        Limelog("Video decode unit queue overflow: dropped %d old frame(s)\n", dropped);
 
-                    // Free the DU we were going to queue
-                    free(qdu);
+        // Heal quickly without stalling playback
+        if (dropped > 0) {
+            LiRequestIdrFrame();
+        }
+    }
+    else
+#endif
+                    {
+                        Limelog("Video decode unit queue overflow (safe): flushing queue + forcing IDR\n");
 
-                    // Free all frames in the decode unit queue
-                    freeDecodeUnitList(LbqFlushQueueItems(&decodeUnitQueue));
+                        // RFI recovery is not supported here
+                        waitingForIdrFrame = true;
 
-                    // Request an IDR frame to recover
-                    LiRequestIdrFrame();
-                    return;
+                        // Clear NAL state for the frame that we failed to enqueue
+                        nalChainHead = qdu->decodeUnit.bufferList;
+                        nalChainDataLength = qdu->decodeUnit.fullLength;
+                        dropFrameState();
+
+                        // Free all frames in the decode unit queue
+                        freeDecodeUnitList(LbqFlushQueueItems(&decodeUnitQueue));
+
+                        // Drop the DU we were going to queue (frees buffers)
+                        LiCompleteVideoFrame(qdu, DR_CLEANUP);
+
+                        // Request an IDR frame to recover
+                        LiRequestIdrFrame();
+                        return;
+                    }
                 }
-            }
             else {
                 // Submit the frame to the decoder
                 validateDecodeUnitForPlayback(&qdu->decodeUnit);

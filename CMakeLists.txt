@@ -7,6 +7,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 option(USE_MBEDTLS "Use MbedTLS instead of OpenSSL" OFF)
 option(CODE_ANALYSIS "Run code analysis during compilation" OFF)
+option(LC_EXPERIMENTAL_DECODEQ_DROP_OLDEST "Enable experimental decode queue drop-oldest overflow policy" OFF)
 
 SET(CMAKE_C_STANDARD 11)
 
@@ -25,6 +26,10 @@ if (NOT DEFINED BUILD_SHARED_LIBS)
 endif()
 
 add_library(moonlight-common-c ${SRC_LIST})
+
+if (LC_EXPERIMENTAL_DECODEQ_DROP_OLDEST)
+    target_compile_definitions(moonlight-common-c PRIVATE LC_EXPERIMENTAL_DECODEQ_DROP_OLDEST)
+endif()
 
 if (BUILD_SHARED_LIBS_OVERRIDE)
   unset(BUILD_SHARED_LIBS)
