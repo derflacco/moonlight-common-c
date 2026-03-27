@@ -572,6 +572,7 @@ static void reassembleFrame(int frameNumber, bool frameIsLTR) {
                         return;
                     }
                 }
+            }
             else {
                 // Submit the frame to the decoder
                 validateDecodeUnitForPlayback(&qdu->decodeUnit);
