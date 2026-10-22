@@ -131,6 +131,12 @@ endif()
 if (BUILD_ABI_REGRESSION_TESTS)
   enable_testing()
 
+  add_executable(test_speaker_owner_arrival tests/test_speaker_owner_arrival.c)
+  target_compile_definitions(test_speaker_owner_arrival PRIVATE $<TARGET_PROPERTY:moonlight-common-c,COMPILE_DEFINITIONS>)
+  target_include_directories(test_speaker_owner_arrival PRIVATE $<TARGET_PROPERTY:moonlight-common-c,INCLUDE_DIRECTORIES>)
+  target_link_libraries(test_speaker_owner_arrival PRIVATE moonlight-common-c enet)
+  add_test(NAME speaker_owner_arrival COMMAND test_speaker_owner_arrival)
+
   add_executable(test_legacy_callback_abi tests/test_legacy_callback_abi.c)
   target_include_directories(test_legacy_callback_abi PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/legacy_abi)
   target_link_libraries(test_legacy_callback_abi PRIVATE moonlight-common-c)

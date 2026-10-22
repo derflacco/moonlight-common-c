@@ -493,7 +493,7 @@ typedef void(*ConnListenerControllerHaptics)(uint16_t controllerNumber, uint32_t
 // Only advertise LI_CCAP_PS_SPEAKER_PCM for controllers with a working
 // speaker renderer.
 typedef void (*ConnListenerControllerSpeakerPcm)(
-    uint16_t controllerNumber, uint32_t generation, uint32_t sequence,
+    uint16_t controllerNumber, uint64_t speakerOwner, uint32_t generation, uint32_t sequence,
     uint64_t samplePosition, uint16_t flags, const uint8_t *pcm,
     uint16_t frames);
 
@@ -810,6 +810,11 @@ int LiSendMultiControllerEvent(short controllerNumber, short activeGamepadMask,
 #define LI_CCAP_GYRO            0x20 // Can report gyroscope events via LiSendControllerMotionEvent()
 #define LI_CCAP_BATTERY_STATE   0x40 // Reports battery state via LiSendControllerBatteryEvent()
 #define LI_CCAP_RGB_LED         0x80 // Can set RGB LED state via ConnListenerSetControllerLED()
+// Adds a nonzero client allocation/session incarnation before ordinary arrival.
+// Only the new speaker extension uses this binding; legacy arrival is unchanged.
+int LiSendControllerSpeakerArrivalEvent(uint8_t controllerNumber, uint16_t activeGamepadMask,
+    uint8_t type, uint32_t supportedButtonFlags, uint16_t capabilities, uint64_t speakerOwner);
+
 int LiSendControllerArrivalEvent(uint8_t controllerNumber, uint16_t activeGamepadMask, uint8_t type,
                                  uint32_t supportedButtonFlags, uint16_t capabilities);
 
