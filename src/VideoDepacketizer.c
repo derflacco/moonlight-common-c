@@ -143,6 +143,7 @@ static void freeDecodeUnitList(PLINKED_BLOCKING_QUEUE_ENTRY entry) {
         entry = nextEntry;
     }
 }
+#ifdef LC_EXPERIMENTAL_DECODEQ_DROP_OLDEST
 // Drop up to maxDrops oldest queued decode units (low-latency overflow recovery).
 // Returns number of dropped frames.
 static int dropOldestQueuedDecodeUnits(int maxDrops) {
@@ -162,6 +163,7 @@ static int dropOldestQueuedDecodeUnits(int maxDrops) {
 
     return dropped;
 }
+#endif /* LC_EXPERIMENTAL_DECODEQ_DROP_OLDEST */
 
 void stopVideoDepacketizer(void) {
     LbqSignalQueueShutdown(&decodeUnitQueue);
