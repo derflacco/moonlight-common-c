@@ -483,6 +483,20 @@ typedef void(*ConnListenerSetAdaptiveTriggers)(uint16_t controllerNumber, uint8_
 // This callback is invoked to set a controller's RGB LED (if present).
 typedef void(*ConnListenerSetControllerLED)(uint16_t controllerNumber, uint8_t r, uint8_t g, uint8_t b);
 
+// Bounded haptic PCM callback on the control receive thread. Must not block.
+// Data is borrowed for the duration of the callback; copy before returning.
+// Only advertise LI_CCAP_HAPTICS_PCM for controllers with a working renderer.
+typedef void(*ConnListenerControllerHaptics)(uint16_t controllerNumber, uint32_t sequence, const uint8_t* pcm, uint16_t frames);
+
+// Bounded controller speaker PCM callback. The callback must copy the borrowed
+// samples before returning and must not block the control receive thread.
+// Only advertise LI_CCAP_PS_SPEAKER_PCM for controllers with a working
+// speaker renderer.
+typedef void (*ConnListenerControllerSpeakerPcm)(
+    uint16_t controllerNumber, uint64_t speakerOwner, uint32_t generation, uint32_t sequence,
+    uint64_t samplePosition, uint16_t flags, const uint8_t *pcm,
+    uint16_t frames);
+
 typedef struct _CONNECTION_LISTENER_CALLBACKS {
     ConnListenerStageStarting stageStarting;
     ConnListenerStageComplete stageComplete;
@@ -497,6 +511,7 @@ typedef struct _CONNECTION_LISTENER_CALLBACKS {
     ConnListenerSetMotionEventState setMotionEventState;
     ConnListenerSetControllerLED setControllerLED;
     ConnListenerSetAdaptiveTriggers setAdaptiveTriggers;
+    ConnListenerControllerHaptics controllerHaptics;
 } CONNECTION_LISTENER_CALLBACKS, *PCONNECTION_LISTENER_CALLBACKS;
 
 // Use this function to zero the connection callbacks when allocated on the stack or heap
@@ -551,6 +566,13 @@ void LiInitializeServerInformation(PSERVER_INFORMATION serverInfo);
 int LiStartConnection(PSERVER_INFORMATION serverInfo, PSTREAM_CONFIGURATION streamConfig, PCONNECTION_LISTENER_CALLBACKS clCallbacks,
     PDECODER_RENDERER_CALLBACKS drCallbacks, PAUDIO_RENDERER_CALLBACKS arCallbacks, void* renderContext, int drFlags,
     void* audioContext, int arFlags);
+
+// Like LiStartConnection(), with the controller speaker PCM callback supplied separately.
+// This keeps CONNECTION_LISTENER_CALLBACKS layout compatible with older callers.
+int LiStartConnectionWithSpeakerPcm(PSERVER_INFORMATION serverInfo, PSTREAM_CONFIGURATION streamConfig,
+    PCONNECTION_LISTENER_CALLBACKS clCallbacks, PDECODER_RENDERER_CALLBACKS drCallbacks,
+    PAUDIO_RENDERER_CALLBACKS arCallbacks, void* renderContext, int drFlags, void* audioContext, int arFlags,
+    ConnListenerControllerSpeakerPcm speakerPcmCallback);
 
 // This function stops streaming. This function is not thread-safe.
 void LiStopConnection(void);
@@ -788,6 +810,11 @@ int LiSendMultiControllerEvent(short controllerNumber, short activeGamepadMask,
 #define LI_CCAP_GYRO            0x20 // Can report gyroscope events via LiSendControllerMotionEvent()
 #define LI_CCAP_BATTERY_STATE   0x40 // Reports battery state via LiSendControllerBatteryEvent()
 #define LI_CCAP_RGB_LED         0x80 // Can set RGB LED state via ConnListenerSetControllerLED()
+// Adds a nonzero client allocation/session incarnation before ordinary arrival.
+// Only the new speaker extension uses this binding; legacy arrival is unchanged.
+int LiSendControllerSpeakerArrivalEvent(uint8_t controllerNumber, uint16_t activeGamepadMask,
+    uint8_t type, uint32_t supportedButtonFlags, uint16_t capabilities, uint64_t speakerOwner);
+
 int LiSendControllerArrivalEvent(uint8_t controllerNumber, uint16_t activeGamepadMask, uint8_t type,
                                  uint32_t supportedButtonFlags, uint16_t capabilities);
 

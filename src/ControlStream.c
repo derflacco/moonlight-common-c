@@ -1,4 +1,6 @@
 #include "Limelight-internal.h"
+#include "ControllerHaptics.h"
+#include "ControllerSpeakerPcm.h"
 
 // This is a private header, but it just contains some time macros
 #include <enet/time.h>
@@ -1317,7 +1319,28 @@ static void controlReceiveThreadFunc(void* context) {
             }
 
             // Process client callbacks in a separate thread
-            if (needsAsyncCallback(ctlHdr->type)) {
+            if (ctlHdr->type == ML_HAPTICS_PACKET_TYPE) {
+                const uint8_t* payload = (const uint8_t*)(ctlHdr + 1);
+                if (packetLength >= (int)sizeof(*ctlHdr) &&
+                    MlHapticsValidate(payload, packetLength - sizeof(*ctlHdr)) &&
+                    ListenerCallbacks.controllerHaptics) {
+                    ListenerCallbacks.controllerHaptics(MlHapticsRead16(payload + 2),
+                        MlHapticsRead32(payload + 4), payload + ML_HAPTICS_HEADER_SIZE,
+                        MlHapticsRead16(payload + 8));
+                }
+            }
+            else if (ctlHdr->type == ML_SPEAKER_PCM_PACKET_TYPE) {
+                const uint8_t* payload = (const uint8_t*)(ctlHdr + 1);
+                if (packetLength >= (int)sizeof(*ctlHdr) &&
+                    MlSpeakerPcmValidate(payload, packetLength - sizeof(*ctlHdr)) &&
+                    ControllerSpeakerPcmCallback) {
+                    ControllerSpeakerPcmCallback(MlSpeakerRead16(payload + 2), MlSpeakerRead64(payload + 24),
+                        MlSpeakerRead32(payload + 4), MlSpeakerRead32(payload + 8),
+                        MlSpeakerRead64(payload + 12), MlSpeakerRead16(payload + 22),
+                        payload + ML_SPEAKER_PCM_HEADER_SIZE, MlSpeakerRead16(payload + 20));
+                }
+            }
+            else if (needsAsyncCallback(ctlHdr->type)) {
                 queueAsyncCallback(ctlHdr, packetLength);
             }
             else if (ctlHdr->type == packetTypes[IDX_TERMINATION]) {
